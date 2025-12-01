@@ -5,7 +5,7 @@ use std::{fs::File, io::Read, path::Path};
 use crate::algebra::{Point3, Vector3};
 
 /// A particle in the system
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Particle {
 	/// The coordinates of the particle
 	coordinates: Point3,
@@ -71,7 +71,7 @@ impl Particle {
 }
 
 /// A system of [particles](Particle)
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct System {
 	/// The [particles](Particle) in the system
 	particles: Vec<Particle>,

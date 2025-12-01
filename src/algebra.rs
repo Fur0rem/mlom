@@ -1,7 +1,7 @@
 //! Linear algebra operations needed for the simulation
 
 /// A point in 3D space
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point3 {
 	/// x coordinate
 	x: f64,
@@ -39,7 +39,7 @@ impl Point3 {
 
 	/// Compute the distance to another [point](Self), squared
 	pub fn distance_to_squared(&self, rhs: &Self) -> f64 {
-		(self.x + rhs.x).powi(2) + (self.y + rhs.y).powi(2) + (self.z + rhs.z).powi(2)
+		(self.x - rhs.x).powi(2) + (self.y - rhs.y).powi(2) + (self.z - rhs.z).powi(2)
 	}
 
 	/// Compute the distance to another [point](Self)
@@ -93,5 +93,45 @@ impl Vector3 {
 	/// Compute the norm of the vector
 	pub fn norm(&self) -> f64 {
 		(self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn point_distance_to_origin() {
+		let o = Point3::origin();
+		assert_eq!(o.x(), 0.0);
+		assert_eq!(o.y(), 0.0);
+		assert_eq!(o.z(), 0.0);
+
+		let a = Point3::from(1.0, 2.0, 2.0);
+		// difference = (1,1,2) -> squared = 1+4+4 = 9 -> distance = 3
+		let dist_sq = a.distance_to_squared(&o);
+		let dist = a.distance_to(&o);
+		let eps = 1e-12;
+		assert!((dist_sq - 9.0).abs() < eps);
+		assert!((dist - 3.0).abs() < eps);
+	}
+
+	#[test]
+	fn point_distance() {
+		let p = Point3::from(1.0, 2.0, 3.0);
+		let q = Point3::from(4.0, 6.0, 3.0);
+		// difference = (3,4,0) -> squared = 9+16+0 = 25 -> distance = 5
+		assert!((p.distance_to_squared(&q) - 25.0).abs() < 1e-12);
+		assert!((p.distance_to(&q) - 5.0).abs() < 1e-12);
+	}
+
+	#[test]
+	fn vector_zero_and_norms() {
+		let z = Vector3::zero();
+		assert_eq!(z.x(), 0.0);
+		assert_eq!(z.y(), 0.0);
+		assert_eq!(z.z(), 0.0);
+		assert!((z.norm_squared() - 0.0).abs() < 1e-12);
+		assert!((z.norm() - 0.0).abs() < 1e-12);
 	}
 }
