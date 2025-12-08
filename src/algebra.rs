@@ -1,5 +1,14 @@
 //! Linear algebra operations needed for the simulation
 
+/// Checks if 2 floats are approximately equal.
+#[macro_export]
+macro_rules! assert_approx_eq {
+	($L: expr, $R: expr) => {
+		let difference = $L - $R;
+		assert!(difference.abs() < 1e-5, "{}", format!("{} =/= {}", $L, $R));
+	};
+}
+
 /// A point in 3D space
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point3 {
@@ -39,7 +48,13 @@ impl Point3 {
 
 	/// Compute the distance to another [point](Self), squared
 	pub fn distance_to_squared(&self, rhs: &Self) -> f64 {
-		(self.x - rhs.x).powi(2) + (self.y - rhs.y).powi(2) + (self.z - rhs.z).powi(2)
+		let dist_squared = (self.x - rhs.x).powi(2) + (self.y - rhs.y).powi(2) + (self.z - rhs.z).powi(2);
+
+		// In the context of a simulation, having a distance of 0 is a bad sign.
+		// So even if it doesn't make sense to check if in here specifically, I am likely to forget to check in the rest of the code.
+		assert!(dist_squared != 0.0);
+
+		return dist_squared;
 	}
 
 	/// Compute the distance to another [point](Self)
@@ -93,6 +108,45 @@ impl Vector3 {
 	/// Compute the norm of the vector
 	pub fn norm(&self) -> f64 {
 		(self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
+	}
+}
+
+macro_rules! add_vec_and_point {
+	($L: ty, $R: ty) => {
+		impl std::ops::Add<$R> for $L {
+			type Output = Point3;
+			fn add(self, rhs: $R) -> Self::Output {
+				Point3::from(self.x() + rhs.x(), self.y() + rhs.y(), self.z() + rhs.z())
+			}
+		}
+	};
+}
+
+macro_rules! impl_add_point_vector {
+	($L: ident, $R: ident) => {
+		add_vec_and_point!($R, $L);
+		add_vec_and_point!(&$R, $L);
+		add_vec_and_point!($R, &$L);
+		add_vec_and_point!(&$R, &$L);
+	};
+}
+
+impl_add_point_vector!(Point3, Vector3);
+impl_add_point_vector!(Vector3, Point3);
+
+impl std::ops::AddAssign<Vector3> for Vector3 {
+	fn add_assign(&mut self, rhs: Vector3) {
+		self.x += rhs.x;
+		self.y += rhs.y;
+		self.z += rhs.z;
+	}
+}
+
+impl std::ops::DivAssign<f64> for Vector3 {
+	fn div_assign(&mut self, rhs: f64) {
+		self.x /= rhs;
+		self.y /= rhs;
+		self.z /= rhs;
 	}
 }
 

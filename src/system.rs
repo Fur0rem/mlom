@@ -2,13 +2,16 @@
 
 use std::{fs::File, io::Read, path::Path};
 
-use crate::algebra::{Point3, Vector3};
+use crate::{
+	algebra::{Point3, Vector3},
+	parameters::{EPSILON_STAR, R_STAR},
+};
 
 /// A particle in the system
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Particle {
 	/// The coordinates of the particle
-	coordinates: Point3,
+	pub(crate) coordinates: Point3,
 }
 
 impl Particle {
@@ -74,15 +77,12 @@ impl Particle {
 #[derive(Debug, Clone, PartialEq)]
 pub struct System {
 	/// The [particles](Particle) in the system
-	particles: Vec<Particle>,
+	pub(crate) particles: Vec<Particle>,
 	/// The forces exercised on pairs of particles
-	forces: Vec<Vec<Vector3>>,
+	pub(crate) forces: Vec<Vec<Vector3>>,
 	/// The number of local particles (unused for now)
-	nb_particles_local: usize,
+	pub(crate) nb_particles_local: usize,
 }
-
-const R_STAR: f64 = 3.0;
-const EPSILON_STAR: f64 = 0.2;
 
 impl System {
 	/// Parse a system from a file
@@ -167,6 +167,11 @@ impl System {
 	pub fn compute_forces(&mut self) {
 		for i in 0..self.nb_particles_total() {
 			for j in 0..self.nb_particles_total() {
+				if i == j {
+					self.forces[i][j] = Vector3::zero();
+					continue;
+				}
+
 				// Gradient function for any coordinate
 				let r_star_over_r_ij_pow2 = R_STAR.powi(2) / self.distance_between_squared(i, j);
 				let r_star_over_r_ij_pow8 = r_star_over_r_ij_pow2.powi(3);
