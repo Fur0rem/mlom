@@ -147,7 +147,7 @@ impl System {
 			}
 		}
 
-		return 4.0 * total;
+		return 2.0 * total;
 	}
 
 	/// Compute the microscopic energy in the system, according to the Lennard-Jones potential.
@@ -166,7 +166,7 @@ impl System {
 			}
 		}
 
-		return 4.0 * total;
+		return 2.0 * total;
 	}
 
 	/// Compute the forces between pairs of particles

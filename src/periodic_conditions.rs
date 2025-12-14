@@ -54,7 +54,7 @@ impl System {
 			}
 		}
 
-		return 4.0 * total;
+		return 2.0 * total;
 	}
 
 	/// Compute the forces between pairs of particles, with periodic conditions.
