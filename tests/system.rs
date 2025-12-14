@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use mlom::assert_approx_eq;
-use mlom::parameters::R_CUT;
+use mlom::parameters::{FAR_AWAY, R_CUT};
 use mlom::periodic_conditions::neighboring_3d_translations;
 use mlom::{algebra::Vector3, system::System};
 
@@ -22,6 +22,14 @@ fn sum_of_forces_is_null() {
 fn if_nb_sym_1_then_equivalent_to_non_periodic() {
 	let system = System::from_file(Path::new("dataset/particles.xyz"), 0);
 	let u_lj_non_periodic = system.microscopic_energy();
-	let u_lj_periodic = system.microscopic_energy_periodic(&[Vector3::zero()], 999.9);
+	let u_lj_periodic = system.microscopic_energy_periodic(&[Vector3::zero()], FAR_AWAY);
+	assert_approx_eq!(u_lj_non_periodic, u_lj_periodic);
+}
+
+#[test]
+fn if_far_away_then_equivalent_to_non_periodic() {
+	let system = System::from_file(Path::new("dataset/particles.xyz"), 0);
+	let u_lj_non_periodic = system.microscopic_energy();
+	let u_lj_periodic = system.microscopic_energy_periodic(&neighboring_3d_translations(FAR_AWAY), FAR_AWAY);
 	assert_approx_eq!(u_lj_non_periodic, u_lj_periodic);
 }

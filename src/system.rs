@@ -77,9 +77,9 @@ impl Particle {
 #[derive(Debug, Clone, PartialEq)]
 pub struct System {
 	/// The [particles](Particle) in the system
-	pub(crate) particles: Vec<Particle>,
+	pub(crate) particles:          Vec<Particle>,
 	/// The forces exercised on pairs of particles
-	pub(crate) forces: Vec<Vec<Vector3>>,
+	pub(crate) forces:             Vec<Vec<Vector3>>,
 	/// The number of local particles (unused for now)
 	pub(crate) nb_particles_local: usize,
 }
@@ -137,7 +137,10 @@ impl System {
 	fn microscopic_energy_reference(&self) -> f64 {
 		let mut total = 0.0;
 		for i in 0..self.nb_particles_total() {
-			for j in (i + 1)..self.nb_particles_total() {
+			for j in 0..self.nb_particles_total() {
+				if i == j {
+					continue;
+				}
 				let r_ij = self.distance_between_squared(i, j).sqrt();
 				let u_ij = EPSILON_STAR * ((R_STAR / r_ij).powi(12) - 2.0 * (R_STAR / r_ij).powi(6));
 				total += u_ij;
@@ -151,7 +154,10 @@ impl System {
 	pub fn microscopic_energy(&self) -> f64 {
 		let mut total = 0.0;
 		for i in 0..self.nb_particles_total() {
-			for j in (i + 1)..self.nb_particles_total() {
+			for j in 0..self.nb_particles_total() {
+				if i == j {
+					continue;
+				}
 				let r_star_over_r_ij_pow2 = R_STAR.powi(2) / self.distance_between_squared(i, j);
 				let r_star_over_r_ij_pow6 = r_star_over_r_ij_pow2.powi(3);
 				let r_star_over_r_ij_pow12 = r_star_over_r_ij_pow6.powi(2);
@@ -209,13 +215,13 @@ impl System {
 
 #[cfg(test)]
 mod tests {
+	use crate::assert_approx_eq;
+
 	use super::*;
 
 	#[test]
 	fn check_energy_optimizations() {
 		let system = System::from_file(Path::new("dataset/particles.xyz"), 0);
-		let relative_difference =
-			(system.microscopic_energy() - system.microscopic_energy_reference()) / system.microscopic_energy_reference();
-		assert!(relative_difference.abs() < 1e-6);
+		assert_approx_eq!(system.microscopic_energy_reference(), system.microscopic_energy());
 	}
 }

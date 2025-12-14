@@ -29,7 +29,11 @@ impl System {
 		let mut total = 0.0;
 		for sym in translations {
 			for i in 0..self.nb_particles_total() {
-				for j in (i + 1)..self.nb_particles_total() {
+				for j in 0..self.nb_particles_total() {
+					if i == j && *sym == Vector3::zero() {
+						continue;
+					}
+
 					// Compute translated particle j
 					let particle_j_with_symmetry = self.particles[j].coordinates + sym;
 
@@ -88,7 +92,11 @@ impl System {
 
 					// Apply gradient in the x, y, and z directions
 					let (x_i, y_i, z_i) = self.particles[i].xyz();
-					let (x_j, y_j, z_j) = self.particles[j].xyz();
+					let (x_j, y_j, z_j) = (
+						particle_j_with_symmetry.x(),
+						particle_j_with_symmetry.y(),
+						particle_j_with_symmetry.z(),
+					);
 					self.forces[i][j] += Vector3::from(gradient(x_i, x_j), gradient(y_i, y_j), gradient(z_i, z_j));
 				}
 			}
