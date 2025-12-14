@@ -208,6 +208,11 @@ impl System {
 
 		return Vector3::from(sx, sy, sz);
 	}
+
+	/// Get a reference to the particles in the system
+	pub fn particles(&self) -> &[Particle] {
+		&self.particles
+	}
 }
 
 #[cfg(test)]
