@@ -9,6 +9,17 @@ macro_rules! assert_approx_eq {
 	};
 }
 
+/// Checks if 2 vectors are approximately equal.
+#[macro_export]
+macro_rules! assert_vector_approx_eq {
+	($L: expr, $R: expr) => {
+		let difference = $L - $R;
+		assert!(difference.x() < 1e-5, "{}", format!("{:?} =/= {:?}", $L, $R));
+		assert!(difference.y() < 1e-5, "{}", format!("{:?} =/= {:?}", $L, $R));
+		assert!(difference.z() < 1e-5, "{}", format!("{:?} =/= {:?}", $L, $R));
+	};
+}
+
 /// A point in 3D space
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point3 {
@@ -124,6 +135,7 @@ macro_rules! add_vec_and_point {
 
 macro_rules! impl_add_point_vector {
 	($L: ident, $R: ident) => {
+		add_vec_and_point!($R, $R);
 		add_vec_and_point!($R, $L);
 		add_vec_and_point!(&$R, $L);
 		add_vec_and_point!($R, &$L);
@@ -133,6 +145,30 @@ macro_rules! impl_add_point_vector {
 
 impl_add_point_vector!(Point3, Vector3);
 impl_add_point_vector!(Vector3, Point3);
+
+macro_rules! sub_vec_and_point {
+	($L: ty, $R: ty) => {
+		impl std::ops::Sub<$R> for $L {
+			type Output = Point3;
+			fn sub(self, rhs: $R) -> Self::Output {
+				Point3::from(self.x() - rhs.x(), self.y() - rhs.y(), self.z() - rhs.z())
+			}
+		}
+	};
+}
+
+macro_rules! impl_sub_point_vector {
+	($L: ident, $R: ident) => {
+		sub_vec_and_point!($R, $R);
+		sub_vec_and_point!($R, $L);
+		sub_vec_and_point!(&$R, $L);
+		sub_vec_and_point!($R, &$L);
+		sub_vec_and_point!(&$R, &$L);
+	};
+}
+
+impl_sub_point_vector!(Point3, Vector3);
+impl_sub_point_vector!(Vector3, Point3);
 
 impl std::ops::AddAssign<Vector3> for Vector3 {
 	fn add_assign(&mut self, rhs: Vector3) {

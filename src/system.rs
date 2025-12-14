@@ -78,8 +78,6 @@ impl Particle {
 pub struct System {
 	/// The [particles](Particle) in the system
 	pub(crate) particles:          Vec<Particle>,
-	/// The forces exercised on pairs of particles
-	pub(crate) forces:             Vec<Vec<Vector3>>,
 	/// The number of local particles (unused for now)
 	pub(crate) nb_particles_local: usize,
 }
@@ -101,13 +99,9 @@ impl System {
 			particles.push(Particle::parse(line));
 		}
 
-		// Initialize forces to 0
-		let forces = vec![vec![Vector3::zero(); particles.len()]; particles.len()];
-
 		assert!(nb_particles_local < particles.len());
 		return Self {
 			particles,
-			forces,
 			nb_particles_local,
 		};
 	}
@@ -170,11 +164,12 @@ impl System {
 	}
 
 	/// Compute the forces between pairs of particles
-	pub fn compute_forces(&mut self) {
+	pub fn compute_forces(&self) -> Vec<Vec<Vector3>> {
+		let mut forces = vec![vec![Vector3::zero(); self.nb_particles_total()]; self.nb_particles_total()];
 		for i in 0..self.nb_particles_total() {
 			for j in 0..self.nb_particles_total() {
 				if i == j {
-					self.forces[i][j] = Vector3::zero();
+					// Force between a particle and itself is 0
 					continue;
 				}
 
@@ -189,20 +184,22 @@ impl System {
 				// Apply gradient in the x, y, and z directions
 				let (x_i, y_i, z_i) = self.particles[i].xyz();
 				let (x_j, y_j, z_j) = self.particles[j].xyz();
-				self.forces[i][j] = Vector3::from(gradient(x_i, x_j), gradient(y_i, y_j), gradient(z_i, z_j));
+				forces[i][j] = Vector3::from(gradient(x_i, x_j), gradient(y_i, y_j), gradient(z_i, z_j));
 			}
 		}
+
+		return forces;
 	}
 
 	/// Compute the sum of all the forces between pairs of particles in the system
-	pub fn sum_of_forces(&self) -> Vector3 {
+	pub fn sum_of_forces(forces: &Vec<Vec<Vector3>>) -> Vector3 {
 		let mut sx = 0.0;
 		let mut sy = 0.0;
 		let mut sz = 0.0;
 
-		for i in 0..self.nb_particles_local() {
-			for j in 0..self.nb_particles_total() {
-				let f = &self.forces[i][j];
+		for i in 0..forces.len() {
+			for j in 0..forces.len() {
+				let f = forces[i][j];
 				sx += f.x();
 				sy += f.y();
 				sz += f.z();

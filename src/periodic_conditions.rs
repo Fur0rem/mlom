@@ -59,16 +59,17 @@ impl System {
 
 	/// Compute the forces between pairs of particles, with periodic conditions.
 	/// The new force that a particle j applies on particle i is the sum of forces of all its symmetries.
-	pub fn compute_forces_periodic(&mut self, translations: &[Vector3], radius_cut: f64) {
-		for i in 0..self.nb_particles_total() {
-			for j in 0..self.nb_particles_total() {
-				self.forces[i][j] = Vector3::zero();
-			}
-		}
+	pub fn compute_forces_periodic(&self, translations: &[Vector3], radius_cut: f64) -> Vec<Vec<Vec<Vector3>>> {
+		let mut forces =
+			vec![vec![vec![Vector3::zero(); self.nb_particles_total()]; self.nb_particles_total()]; translations.len()];
 
-		for i in 0..self.nb_particles_total() {
-			for j in (i + 1)..self.nb_particles_total() {
-				for sym in translations {
+		for (sym_idx, sym) in translations.iter().enumerate() {
+			for i in 0..self.nb_particles_total() {
+				for j in 0..self.nb_particles_total() {
+					if i == j && *sym == Vector3::zero() {
+						continue;
+					}
+
 					// Compute translated particle j
 					let particle_j_with_symmetry = self.particles[j].coordinates + sym;
 
@@ -97,9 +98,31 @@ impl System {
 						particle_j_with_symmetry.y(),
 						particle_j_with_symmetry.z(),
 					);
-					self.forces[i][j] += Vector3::from(gradient(x_i, x_j), gradient(y_i, y_j), gradient(z_i, z_j));
+					forces[sym_idx][i][j] += Vector3::from(gradient(x_i, x_j), gradient(y_i, y_j), gradient(z_i, z_j));
 				}
 			}
 		}
+
+		return forces;
+	}
+
+	/// Compute the sum of all the forces between pairs of particles in the system with periodic conditions
+	pub fn sum_of_forces_periodic(forces: &Vec<Vec<Vec<Vector3>>>) -> Vector3 {
+		let mut sx = 0.0;
+		let mut sy = 0.0;
+		let mut sz = 0.0;
+
+		for sym_idx in 0..forces.len() {
+			for i in 0..forces[sym_idx].len() {
+				for j in 0..forces[sym_idx][i].len() {
+					let f = forces[sym_idx][i][j];
+					sx += f.x();
+					sy += f.y();
+					sz += f.z();
+				}
+			}
+		}
+
+		return Vector3::from(sx, sy, sz);
 	}
 }

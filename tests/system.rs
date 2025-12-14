@@ -1,21 +1,24 @@
 use std::path::Path;
 
-use mlom::assert_approx_eq;
-use mlom::parameters::{FAR_AWAY, R_CUT};
+use mlom::parameters::{BOX_SIDE, FAR_AWAY, R_CUT};
 use mlom::periodic_conditions::neighboring_3d_translations;
 use mlom::{algebra::Vector3, system::System};
+use mlom::{assert_approx_eq, assert_vector_approx_eq};
 
 #[test]
 fn sum_of_forces_is_null() {
-	let mut system = System::from_file(Path::new("dataset/particles.xyz"), 0);
+	let system = System::from_file(Path::new("dataset/particles.xyz"), 0);
 
 	// Non periodic conditions
 	system.compute_forces();
-	assert_eq!(system.sum_of_forces(), Vector3::zero());
+	assert_vector_approx_eq!(System::sum_of_forces(&system.compute_forces()), Vector3::zero());
 
 	// Periodic conditions
 	system.compute_forces_periodic(&neighboring_3d_translations(5.0), R_CUT);
-	assert_eq!(system.sum_of_forces(), Vector3::zero());
+	assert_vector_approx_eq!(
+		System::sum_of_forces_periodic(&system.compute_forces_periodic(&neighboring_3d_translations(BOX_SIDE), R_CUT)),
+		Vector3::zero()
+	);
 }
 
 #[test]
