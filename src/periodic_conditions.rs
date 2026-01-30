@@ -1,7 +1,7 @@
 use crate::{
 	algebra::Vector3,
 	parameters::{EPSILON_STAR, R_STAR},
-	system::System,
+	system::{Particle, System},
 };
 
 /// Computes the neighbors in 3D of the simulation box.
@@ -35,26 +35,39 @@ impl System {
 					}
 
 					// Compute translated particle j
-					let particle_j_with_symmetry = self.particles[j].coordinates + sym;
+					let particle_j_with_symmetry = (self.particles[j].coordinates + sym).as_point();
+
+					// FIXME: Sometimes they're at the same place, no idea why
+					if self.particles[i].coordinates == particle_j_with_symmetry {
+						dbg!(&i, &j, &sym);
+						dbg!(particle_j_with_symmetry);
+						dbg!(self.particles[i]);
+						dbg!(sym);
+						dbg!(i);
+						dbg!(j);
+						continue;
+					}
 
 					// Apply cut above given radius
 					let dist_ij_squared = self.particles[i].coordinates.distance_to_squared(&particle_j_with_symmetry);
 					assert!(dist_ij_squared != 0.0);
+					if dist_ij_squared < 0.0001 {
+						println!("dist = {dist_ij_squared}");
+						assert!(dist_ij_squared > 0.01);
+					}
 					if dist_ij_squared > radius_cut.powi(2) {
 						continue;
 					}
 
-					// The usual energy term
-					let r_star_over_r_ij_pow2 = R_STAR.powi(2) / dist_ij_squared;
-					let r_star_over_r_ij_pow6 = r_star_over_r_ij_pow2.powi(3);
-					let r_star_over_r_ij_pow12 = r_star_over_r_ij_pow6.powi(2);
-					let u_ij = EPSILON_STAR * (r_star_over_r_ij_pow12 - (2.0 * r_star_over_r_ij_pow6));
+					// The usual energy term (ISM 3)
+					let r_star_over_r_ij = R_STAR / dist_ij_squared.sqrt();
+					let u_ij = r_star_over_r_ij.powi(12) - 2.0 * r_star_over_r_ij.powi(6);
 					total += u_ij;
 				}
 			}
 		}
 
-		return 2.0 * total;
+		return (4.0 * EPSILON_STAR * total) / 2.0;
 	}
 
 	/// Compute the forces between pairs of particles, with periodic conditions.
@@ -71,7 +84,7 @@ impl System {
 					}
 
 					// Compute translated particle j
-					let particle_j_with_symmetry = self.particles[j].coordinates + sym;
+					let particle_j_with_symmetry = (self.particles[j].coordinates + sym).as_point();
 
 					if self.particles[i].coordinates == particle_j_with_symmetry {
 						continue;
@@ -83,22 +96,20 @@ impl System {
 						continue;
 					}
 
-					// Gradient function for any coordinate
-					let r_star_over_r_ij_pow2 = R_STAR.powi(2) / dist_ij_squared;
-					let r_star_over_r_ij_pow8 = r_star_over_r_ij_pow2.powi(3);
-					let r_star_over_r_ij_pow14 = r_star_over_r_ij_pow8.powi(7);
-					let gradient = |c_i: f64, c_j: f64| {
-						-48.0 * EPSILON_STAR * (r_star_over_r_ij_pow14 - r_star_over_r_ij_pow8) * (c_i - c_j)
-					};
+					if dist_ij_squared < 0.0001 {
+						println!("dist = {dist_ij_squared}");
+						continue;
+						// assert!(dist_ij_squared > 0.01);
+					}
 
-					// Apply gradient in the x, y, and z directions
-					let (x_i, y_i, z_i) = self.particles[i].xyz();
-					let (x_j, y_j, z_j) = (
-						particle_j_with_symmetry.x(),
-						particle_j_with_symmetry.y(),
-						particle_j_with_symmetry.z(),
+					// Gradient function for any coordinate
+					forces[sym_idx][i][j] += self.energy_gradient(
+						&self.particles[i],
+						&Particle {
+							coordinates: particle_j_with_symmetry,
+							momentum: self.particles[j].momentum,
+						},
 					);
-					forces[sym_idx][i][j] += Vector3::from(gradient(x_i, x_j), gradient(y_i, y_j), gradient(z_i, z_j));
 				}
 			}
 		}

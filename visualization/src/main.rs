@@ -13,11 +13,47 @@ struct OrbitCamera {
 #[derive(Component)]
 struct Billboard;
 
+#[derive(Resource)]
+struct Simulation {
+	system: System,
+}
+
+#[derive(Resource, Default)]
+struct RunState {
+	running:   bool,
+	step_once: bool,
+}
+
+#[derive(Component)]
+struct ParticleIndex(usize);
+
+fn handle_input(keyboard_input: Res<ButtonInput<KeyCode>>, mut run_state: ResMut<RunState>) {
+	if keyboard_input.just_pressed(KeyCode::KeyS) {
+		run_state.step_once = true;
+	}
+	if keyboard_input.just_pressed(KeyCode::KeyR) {
+		run_state.running = !run_state.running;
+	}
+}
+
+fn run_simulation(mut simulation: ResMut<Simulation>, mut run_state: ResMut<RunState>, mut query: Query<(&mut Transform, &ParticleIndex)>) {
+	if run_state.running || run_state.step_once {
+		simulation.system.step();
+		run_state.step_once = false;
+
+		for (mut transform, index) in query.iter_mut() {
+			let (x, y, z) = simulation.system.particles()[index.0].xyz();
+			transform.translation = Vec3::new(x as f32, y as f32, z as f32);
+		}
+	}
+}
+
 fn main() {
 	App::new()
 		.add_plugins(DefaultPlugins)
+		.init_resource::<RunState>()
 		.add_systems(Startup, setup)
-		.add_systems(Update, orbit_camera)
+		.add_systems(Update, (orbit_camera, handle_input, run_simulation))
 		.add_systems(PostUpdate, update_billboards)
 		.run();
 }
@@ -41,15 +77,18 @@ fn setup(
 	});
 
 	// Spawn a circle for each particle
-	for particle in system.particles() {
+	for (i, particle) in system.particles().iter().enumerate() {
 		let (x, y, z) = particle.xyz();
 		commands.spawn((
 			Mesh3d(mesh_handle.clone()),
 			MeshMaterial3d(material_handle.clone()),
 			Transform::from_xyz(x as f32, y as f32, z as f32),
 			Billboard,
+			ParticleIndex(i),
 		));
 	}
+
+	commands.insert_resource(Simulation { system });
 
 	// Add a camera
 	let radius = 40.0;

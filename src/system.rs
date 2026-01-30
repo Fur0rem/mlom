@@ -4,7 +4,7 @@ use std::{fs::File, io::Read, path::Path};
 
 use crate::{
 	algebra::{Point3, Vector3},
-	parameters::{EPSILON_STAR, R_STAR},
+	parameters::*,
 };
 
 /// A particle in the system
@@ -12,6 +12,8 @@ use crate::{
 pub struct Particle {
 	/// The coordinates of the particle
 	pub(crate) coordinates: Point3,
+	/// The momentum of the particle
+	pub(crate) momentum: Vector3,
 }
 
 impl Particle {
@@ -28,8 +30,11 @@ impl Particle {
 		let y: f64 = parts.next().unwrap().parse().unwrap();
 		let z: f64 = parts.next().unwrap().parse().unwrap();
 
+		let momentum = Vector3::zero(); // 0 for now
+
 		return Self {
 			coordinates: Point3::from(x, y, z),
+			momentum,
 		};
 	}
 
@@ -71,27 +76,41 @@ impl Particle {
 	pub fn distance_to(&self, rhs: &Self) -> f64 {
 		return self.distance_to_squared(rhs).sqrt();
 	}
+
+	/// Compute the kinetic moment of the [particle](Self)
+	pub fn kinetic_moment(&self) -> Vector3 {
+		return self.momentum;
+	}
+
+	/// Put the particle back in the box
+	pub fn put_back_in_box(&mut self) {
+		self.coordinates.x = (self.coordinates.x + BOX_SIDE / 2.0).rem_euclid(BOX_SIDE) - BOX_SIDE / 2.0;
+		self.coordinates.y = (self.coordinates.y + BOX_SIDE / 2.0).rem_euclid(BOX_SIDE) - BOX_SIDE / 2.0;
+		self.coordinates.z = (self.coordinates.z + BOX_SIDE / 2.0).rem_euclid(BOX_SIDE) - BOX_SIDE / 2.0;
+
+		assert!(self.coordinates.x <= BOX_SIDE / 2.0);
+		assert!(self.coordinates.x >= -BOX_SIDE / 2.0);
+		assert!(self.coordinates.y <= BOX_SIDE / 2.0);
+		assert!(self.coordinates.y >= -BOX_SIDE / 2.0);
+		assert!(self.coordinates.z <= BOX_SIDE / 2.0);
+		assert!(self.coordinates.z >= -BOX_SIDE / 2.0);
+	}
 }
 
 /// A system of [particles](Particle)
 #[derive(Debug, Clone, PartialEq)]
 pub struct System {
 	/// The [particles](Particle) in the system
-	pub(crate) particles:          Vec<Particle>,
+	pub(crate) particles: Vec<Particle>,
 	/// The number of local particles (unused for now)
 	pub(crate) nb_particles_local: usize,
 }
 
 impl System {
-	/// Parse a system from a file
-	pub fn from_file(path: &Path, nb_particles_local: usize) -> Self {
-		// Read the file
-		let mut file = File::open(path).unwrap();
-		let mut contents = String::new();
-		file.read_to_string(&mut contents).unwrap();
-
+	/// Parse a system from a string
+	pub fn from_str(s: &str, nb_particles_local: usize) -> Self {
 		// Ignore first line
-		let lines = contents.lines().skip(1);
+		let lines = s.lines().skip(1);
 
 		// Parse the rest of the lines
 		let mut particles = Vec::new();
@@ -99,11 +118,27 @@ impl System {
 			particles.push(Particle::parse(line));
 		}
 
+		// Create the system
 		assert!(nb_particles_local < particles.len());
-		return Self {
+		let mut system = Self {
 			particles,
 			nb_particles_local,
 		};
+
+		// Initialize the particle momentums
+		system.init_particles_momentums();
+
+		return system;
+	}
+
+	/// Parse a system from a file
+	pub fn from_file(path: &Path, nb_particles_local: usize) -> Self {
+		// Read the file
+		let mut file = File::open(path).unwrap();
+		let mut contents = String::new();
+		file.read_to_string(&mut contents).unwrap();
+
+		return Self::from_str(&contents, nb_particles_local);
 	}
 
 	/// Get the total number of particles in the [system](Self)
@@ -126,6 +161,16 @@ impl System {
 		self.particles[i].distance_to_squared(&self.particles[j])
 	}
 
+	/// Compute the distance between 2 [particles](Particle) of the [system](Self).
+	///
+	/// # Arguments
+	///
+	/// * `i` - The index of the first particle
+	/// * `j` - The index of the second particle
+	pub fn distance_between(&self, i: usize, j: usize) -> f64 {
+		self.particles[i].distance_to_squared(&self.particles[j]).sqrt()
+	}
+
 	/// Reference (unoptimized) method for computing the microscopic energy in the system, according to the Lennard-Jones potential.
 	#[allow(unused)]
 	fn microscopic_energy_reference(&self) -> f64 {
@@ -144,23 +189,32 @@ impl System {
 		return 2.0 * total;
 	}
 
+	pub fn energy_gradient(&self, particle_i: &Particle, particle_j: &Particle) -> Vector3 {
+		let r_ij = particle_i.distance_to(&particle_j);
+		let gradient = |c_i, c_j| {
+			-48.0 * EPSILON_STAR * ((R_STAR / r_ij).powi(12) - (R_STAR / r_ij).powi(6)) * ((c_i - c_j) / r_ij.powi(2))
+		};
+
+		// Apply gradient in the x, y, and z directions
+		let (x_i, y_i, z_i) = particle_i.xyz();
+		let (x_j, y_j, z_j) = particle_j.xyz();
+		return Vector3::from(gradient(x_i, x_j), gradient(y_i, y_j), gradient(z_i, z_j));
+	}
+
 	/// Compute the microscopic energy in the system, according to the Lennard-Jones potential.
 	pub fn microscopic_energy(&self) -> f64 {
 		let mut total = 0.0;
 		for i in 0..self.nb_particles_total() {
-			for j in 0..self.nb_particles_total() {
-				if i == j {
-					continue;
-				}
-				let r_star_over_r_ij_pow2 = R_STAR.powi(2) / self.distance_between_squared(i, j);
-				let r_star_over_r_ij_pow6 = r_star_over_r_ij_pow2.powi(3);
-				let r_star_over_r_ij_pow12 = r_star_over_r_ij_pow6.powi(2);
+			for j in (i + 1)..self.nb_particles_total() {
+				let r_ij = self.distance_between(i, j);
+				let r_star_over_r_ij_pow6 = (R_STAR / r_ij).powi(6);
+				let r_star_over_r_ij_pow12 = (R_STAR / r_ij).powi(12);
 				let u_ij = EPSILON_STAR * (r_star_over_r_ij_pow12 - (2.0 * r_star_over_r_ij_pow6));
 				total += u_ij;
 			}
 		}
 
-		return 2.0 * total;
+		return 4.0 * total;
 	}
 
 	/// Compute the forces between pairs of particles
@@ -173,18 +227,7 @@ impl System {
 					continue;
 				}
 
-				// Gradient function for any coordinate
-				let r_star_over_r_ij_pow2 = R_STAR.powi(2) / self.distance_between_squared(i, j);
-				let r_star_over_r_ij_pow8 = r_star_over_r_ij_pow2.powi(3);
-				let r_star_over_r_ij_pow14 = r_star_over_r_ij_pow8.powi(7);
-				let gradient = |c_i: f64, c_j: f64| {
-					-48.0 * EPSILON_STAR * (r_star_over_r_ij_pow14 - r_star_over_r_ij_pow8) * (c_i - c_j)
-				};
-
-				// Apply gradient in the x, y, and z directions
-				let (x_i, y_i, z_i) = self.particles[i].xyz();
-				let (x_j, y_j, z_j) = self.particles[j].xyz();
-				forces[i][j] = Vector3::from(gradient(x_i, x_j), gradient(y_i, y_j), gradient(z_i, z_j));
+				forces[i][j] = self.energy_gradient(&self.particles[i], &self.particles[j]);
 			}
 		}
 

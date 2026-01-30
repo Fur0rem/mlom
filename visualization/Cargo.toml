@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.17.3"
+bevy = { version = "0.18.0" }
 mlom = { version = "*", path = "../" }
 
 
 [profile.dev]
-opt-level = 2
+opt-level = "z"

@@ -1,5 +1,7 @@
 //! Linear algebra operations needed for the simulation
 
+use rand::{Rng, distr::Uniform, rng};
+
 /// Checks if 2 floats are approximately equal.
 #[macro_export]
 macro_rules! assert_approx_eq {
@@ -24,11 +26,11 @@ macro_rules! assert_vector_approx_eq {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point3 {
 	/// x coordinate
-	x: f64,
+	pub(crate) x: f64,
 	/// y coordinate
-	y: f64,
+	pub(crate) y: f64,
 	/// z coordinate
-	z: f64,
+	pub(crate) z: f64,
 }
 
 impl Point3 {
@@ -75,7 +77,7 @@ impl Point3 {
 }
 
 /// A vector in 3D space
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, PartialEq, PartialOrd)]
 pub struct Vector3 {
 	/// x component
 	x: f64,
@@ -85,10 +87,28 @@ pub struct Vector3 {
 	z: f64,
 }
 
+impl std::fmt::Debug for Vector3 {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "(x: {}, y: {}, z: {})", self.x, self.y, self.z)
+	}
+}
+
 impl Vector3 {
 	/// Create a vector from the given x y z components
 	pub fn from(x: f64, y: f64, z: f64) -> Self {
 		Self { x, y, z }
+	}
+
+	/// Create a random vector in the unit cube, i.e. each component is in the range [-1, 1]
+	pub fn random_in_unit_cube() -> Self {
+		let distribution = Uniform::new_inclusive(-1.0f64, 1.0f64).unwrap();
+		let mut rng = rng();
+
+		return Vector3 {
+			x: rng.sample(distribution),
+			y: rng.sample(distribution),
+			z: rng.sample(distribution),
+		};
 	}
 
 	/// The x component of the vector
@@ -120,14 +140,22 @@ impl Vector3 {
 	pub fn norm(&self) -> f64 {
 		(self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
 	}
+
+	pub fn as_point(self) -> Point3 {
+		Point3 {
+			x: self.x,
+			y: self.y,
+			z: self.z,
+		}
+	}
 }
 
 macro_rules! add_vec_and_point {
 	($L: ty, $R: ty) => {
 		impl std::ops::Add<$R> for $L {
-			type Output = Point3;
+			type Output = Vector3;
 			fn add(self, rhs: $R) -> Self::Output {
-				Point3::from(self.x() + rhs.x(), self.y() + rhs.y(), self.z() + rhs.z())
+				Vector3::from(self.x() + rhs.x(), self.y() + rhs.y(), self.z() + rhs.z())
 			}
 		}
 	};
@@ -146,12 +174,36 @@ macro_rules! impl_add_point_vector {
 impl_add_point_vector!(Point3, Vector3);
 impl_add_point_vector!(Vector3, Point3);
 
+macro_rules! add_assign_vec_and_point {
+	($L: ty, $R: ty) => {
+		impl std::ops::AddAssign<$R> for $L {
+			fn add_assign(&mut self, rhs: $R) {
+				self.x += rhs.x();
+				self.y += rhs.y();
+				self.z += rhs.z();
+			}
+		}
+	};
+}
+
+macro_rules! impl_add_assign_point_vector {
+	($L: ident, $R: ident) => {
+		add_assign_vec_and_point!($R, $R);
+		add_assign_vec_and_point!($R, &$R);
+		add_assign_vec_and_point!($R, $L);
+		add_assign_vec_and_point!($R, &$L);
+	};
+}
+
+impl_add_assign_point_vector!(Point3, Vector3);
+impl_add_assign_point_vector!(Vector3, Point3);
+
 macro_rules! sub_vec_and_point {
 	($L: ty, $R: ty) => {
 		impl std::ops::Sub<$R> for $L {
-			type Output = Point3;
+			type Output = Vector3;
 			fn sub(self, rhs: $R) -> Self::Output {
-				Point3::from(self.x() - rhs.x(), self.y() - rhs.y(), self.z() - rhs.z())
+				Vector3::from(self.x() - rhs.x(), self.y() - rhs.y(), self.z() - rhs.z())
 			}
 		}
 	};
@@ -170,19 +222,76 @@ macro_rules! impl_sub_point_vector {
 impl_sub_point_vector!(Point3, Vector3);
 impl_sub_point_vector!(Vector3, Point3);
 
-impl std::ops::AddAssign<Vector3> for Vector3 {
-	fn add_assign(&mut self, rhs: Vector3) {
-		self.x += rhs.x;
-		self.y += rhs.y;
-		self.z += rhs.z;
+macro_rules! sub_assign_vec_and_point {
+	($L: ty, $R: ty) => {
+		impl std::ops::SubAssign<$R> for $L {
+			fn sub_assign(&mut self, rhs: $R) {
+				self.x -= rhs.x();
+				self.y -= rhs.y();
+				self.z -= rhs.z();
+			}
+		}
+	};
+}
+
+macro_rules! impl_sub_assign_point_vector {
+	($L: ident, $R: ident) => {
+		sub_assign_vec_and_point!($R, $R);
+		sub_assign_vec_and_point!($R, &$R);
+		sub_assign_vec_and_point!($R, $L);
+		sub_assign_vec_and_point!($R, &$L);
+	};
+}
+
+impl_sub_assign_point_vector!(Point3, Vector3);
+impl_sub_assign_point_vector!(Vector3, Point3);
+
+impl std::ops::Mul<f64> for Vector3 {
+	type Output = Vector3;
+	fn mul(self, rhs: f64) -> Self::Output {
+		Self::Output {
+			x: self.x * rhs,
+			y: self.y * rhs,
+			z: self.z * rhs,
+		}
+	}
+}
+
+impl std::ops::Mul<Vector3> for f64 {
+	type Output = Vector3;
+	fn mul(self, rhs: Vector3) -> Self::Output {
+		Self::Output {
+			x: rhs.x * self,
+			y: rhs.y * self,
+			z: rhs.z * self,
+		}
+	}
+}
+
+impl std::ops::MulAssign<f64> for Vector3 {
+	fn mul_assign(&mut self, rhs: f64) {
+		self.x *= rhs;
+		self.y *= rhs;
+		self.z *= rhs;
+	}
+}
+
+impl std::ops::Div<f64> for Vector3 {
+	type Output = Vector3;
+	fn div(self, rhs: f64) -> Self::Output {
+		Self::Output {
+			x: self.x * rhs,
+			y: self.y * rhs,
+			z: self.z * rhs,
+		}
 	}
 }
 
 impl std::ops::DivAssign<f64> for Vector3 {
 	fn div_assign(&mut self, rhs: f64) {
-		self.x /= rhs;
-		self.y /= rhs;
-		self.z /= rhs;
+		self.x *= rhs;
+		self.y *= rhs;
+		self.z *= rhs;
 	}
 }
 
