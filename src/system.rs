@@ -1,4 +1,4 @@
-//! A system of particles
+//! The system of particles
 
 use std::{fs::File, io::Read, path::Path};
 
@@ -132,6 +132,10 @@ pub struct System {
 
 impl System {
 	/// Parse a system from a string
+	///
+	/// # Arguments
+	/// * `s` - The string to parse
+	/// * `nb_particles_local` - Unused.
 	pub fn from_str(s: &str, nb_particles_local: usize) -> Self {
 		// Ignore first line
 		let lines = s.lines().skip(1);
@@ -156,6 +160,10 @@ impl System {
 	}
 
 	/// Parse a system from a file
+	///
+	/// # Arguments
+	/// * `path` - The path to the file to parse
+	/// * `nb_particles_local` - Unused.
 	pub fn from_file(path: &Path, nb_particles_local: usize) -> Self {
 		// Read the file
 		let mut file = File::open(path).unwrap();
@@ -211,69 +219,6 @@ impl System {
 		}
 
 		return 2.0 * total;
-	}
-
-	pub fn energy_gradient(&self, particle_i: &Particle, particle_j: &Particle) -> Vector3 {
-		let r_ij = particle_i.distance_to(&particle_j);
-		let gradient = |c_i, c_j| {
-			-48.0 * EPSILON_STAR * ((R_STAR / r_ij).powi(12) - (R_STAR / r_ij).powi(6)) * ((c_i - c_j) / r_ij.powi(2))
-		};
-
-		// Apply gradient in the x, y, and z directions
-		let (x_i, y_i, z_i) = particle_i.xyz();
-		let (x_j, y_j, z_j) = particle_j.xyz();
-		return Vector3::from(gradient(x_i, x_j), gradient(y_i, y_j), gradient(z_i, z_j));
-	}
-
-	/// Compute the microscopic energy in the system, according to the Lennard-Jones potential.
-	pub fn microscopic_energy(&self) -> f64 {
-		let mut total = 0.0;
-		for i in 0..self.nb_particles_total() {
-			for j in (i + 1)..self.nb_particles_total() {
-				let r_ij = self.distance_between(i, j);
-				let r_star_over_r_ij_pow6 = (R_STAR / r_ij).powi(6);
-				let r_star_over_r_ij_pow12 = (R_STAR / r_ij).powi(12);
-				let u_ij = EPSILON_STAR * (r_star_over_r_ij_pow12 - (2.0 * r_star_over_r_ij_pow6));
-				total += u_ij;
-			}
-		}
-
-		return 4.0 * total;
-	}
-
-	/// Compute the forces between pairs of particles
-	pub fn compute_forces(&self) -> Vec<Vec<Vector3>> {
-		let mut forces = vec![vec![Vector3::zero(); self.nb_particles_total()]; self.nb_particles_total()];
-		for i in 0..self.nb_particles_total() {
-			for j in 0..self.nb_particles_total() {
-				if i == j {
-					// Force between a particle and itself is 0
-					continue;
-				}
-
-				forces[i][j] = self.energy_gradient(&self.particles[i], &self.particles[j]);
-			}
-		}
-
-		return forces;
-	}
-
-	/// Compute the sum of all the forces between pairs of particles in the system
-	pub fn sum_of_forces(forces: &Vec<Vec<Vector3>>) -> Vector3 {
-		let mut sx = 0.0;
-		let mut sy = 0.0;
-		let mut sz = 0.0;
-
-		for i in 0..forces.len() {
-			for j in 0..forces.len() {
-				let f = forces[i][j];
-				sx += f.x();
-				sy += f.y();
-				sz += f.z();
-			}
-		}
-
-		return Vector3::from(sx, sy, sz);
 	}
 
 	/// Get a reference to the particles in the system

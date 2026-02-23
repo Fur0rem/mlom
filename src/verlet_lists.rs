@@ -1,11 +1,21 @@
+//! Verlet lists for efficient neighbor searching.
+//!
+//! Updated each `REBUILD_VERLET_LISTS_FREQUENCY` steps for better performance.
+//! Neighbor lists will be built with a "skin" distance to account for particle movement between rebuilds, ensuring no interactions are missed during `REBUILD_VERLET_LISTS_FREQUENCY` steps.
+
 use crate::{
 	algebra::Vector3,
-	energy::force_between_particles,
 	parameters::*,
+	potentials::force_between_particles,
 	system::{Particle, System},
 };
 
 /// Estimate the maximum number of neighbors per particle based on the density and cut radius, to dimension neighbor lists.
+///
+/// # Arguments
+/// * `nb_particles` - Total number of particles in the system.
+/// * `box_side` - Length of the simulation box side.
+/// * `cut_radius` - Cutoff radius for interactions.
 pub fn max_number_of_neighbors(nb_particles: usize, box_side: f64, cut_radius: f64) -> usize {
 	// Compute a conservative "skin" distance that particles can travel and therefore still be relevant for the next rebuild window.
 	// Two particles can approach by up to 2 * vmax * n_steps * dt per rebuild period,
@@ -26,12 +36,16 @@ pub fn max_number_of_neighbors(nb_particles: usize, box_side: f64, cut_radius: f
 	return std::cmp::max(1, capped);
 }
 
+/// A neighbor in the Verlet list
 #[derive(Debug, Clone, PartialEq)]
 pub struct Neighbor {
+	/// Index of the neighboring particle in the system's particle list
 	pub index: usize,
+	/// Symmetry translation to apply to the neighboring particle's coordinates, to account for periodic conditions
 	pub symmetry: Vector3,
 }
 
+/// Verlet list containing neighbors for all particles in the system, with periodic conditions.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VerletList {
 	/// Flattened list of neighbors for all particles, assumed to be of size `nb_particles * max_number_of_neighbors`
@@ -42,13 +56,25 @@ pub struct VerletList {
 }
 
 impl VerletList {
+	/// Get the neighbors of a given particle.
+	///
+	/// # Arguments
+	/// * `particle_index` - Index of the particle in the system's particle list.
+	/// * `max_number_of_neighbors` - Maximum number of neighbors per particle.
 	pub fn neighbors_of_particle(&self, particle_index: usize, max_number_of_neighbors: usize) -> &[Neighbor] {
 		let start = particle_index * max_number_of_neighbors;
 		let end = start + self.number_of_neighbors_per_particle[particle_index];
 		return &self.neighbors[start..end];
 	}
 
-	pub fn build(system: &System, translations: &[Vector3], cut_radius: f64, max_number_of_neighbors: usize) -> Self {
+	/// Build the Verlet list for a given system, with periodic conditions.
+	///
+	/// # Arguments
+	/// * `system` - The system for which to build the Verlet list.
+	/// * `symmetries` - The list of symmetry translations to apply for periodic conditions.
+	/// * `cut_radius` - The cutoff radius for interactions.
+	/// * `max_number_of_neighbors` - The maximum number of neighbors per particle.
+	pub fn build(system: &System, symmetries: &[Vector3], cut_radius: f64, max_number_of_neighbors: usize) -> Self {
 		let mut neighbors = vec![
 			Neighbor {
 				index: 0,
@@ -60,7 +86,7 @@ impl VerletList {
 		for i in 0..system.nb_particles_total() {
 			let mut count_neighbors = 0;
 			for j in i + 1..system.nb_particles_total() {
-				for sym in translations {
+				for sym in symmetries {
 					let particle_j_with_symmetry = (system.particles[j].coordinates + *sym).as_point();
 					let dist_ij_squared =
 						system.particles[i].coordinates.distance_to_squared(&particle_j_with_symmetry);
@@ -89,6 +115,11 @@ impl VerletList {
 }
 
 impl System {
+	/// Compute the forces on each particle in the system, with periodic conditions, using the Verlet list for efficient neighbor searching.
+	///
+	/// # Arguments
+	/// * `verlet_list` - The Verlet list containing neighbors for all particles.
+	/// * `max_number_of_neighbors` - The maximum number of neighbors per particle.
 	pub fn compute_forces_periodic_with_neighbor_lists(
 		&self, verlet_list: &VerletList, max_number_of_neighbors: usize,
 	) -> Vec<Vector3> {

@@ -1,12 +1,17 @@
+//! Periodic conditions handling for the simulation, including energy and force computations with periodic boundary conditions.
+
 use crate::{
 	algebra::Vector3,
-	energy::energy_between_particles,
 	parameters::*,
+	potentials::energy_between_particles,
 	system::{Particle, System},
 };
 
-/// Computes the neighbors in 3D of the simulation box.
-pub fn neighboring_3d_translations(box_side: f64) -> Vec<Vector3> {
+/// Computes the translations corresponding to the 26 neighboring boxes in a 3D periodic system, given the side length of the box.
+///
+/// # Arguments
+/// * `box_side` - The length of the simulation box side.
+pub fn neighboring_3d_symmetries(box_side: f64) -> Vec<Vector3> {
 	let mut symmetries = Vec::with_capacity(27);
 	for x in -1..=1 {
 		for y in -1..=1 {
@@ -26,9 +31,13 @@ pub fn neighboring_3d_translations(box_side: f64) -> Vec<Vector3> {
 
 impl System {
 	/// Compute the microscopic energy in the system, according to the Lennard-Jones potential, with periodic conditions.
-	pub fn microscopic_energy_periodic(&self, translations: &[Vector3], radius_cut: f64) -> f64 {
+	///
+	/// # Arguments
+	/// * `symmetries` - The list of symmetry translations to apply to the particles for periodic conditions.
+	/// * `radius_cut` - The cutoff radius for interactions. Only pairs of particles within this distance (after applying the symmetry translations) will contribute to the energy.
+	pub fn microscopic_energy_periodic(&self, symmetries: &[Vector3], radius_cut: f64) -> f64 {
 		let mut total = 0.0;
-		for sym in translations {
+		for sym in symmetries {
 			for i in 0..self.nb_particles_total() {
 				for j in 0..self.nb_particles_total() {
 					if i == j && *sym == Vector3::zero() {

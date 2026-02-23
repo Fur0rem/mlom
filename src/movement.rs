@@ -1,7 +1,9 @@
-use crate::energy::force_between_particles;
-use crate::neighbor_query::{VerletList, max_number_of_neighbors};
+//! Movement and simulation logic of the system, including the velocity Verlet algorithm, temperature control with the Berendsen thermostat, and energy/temperature evolution plotting.
+
+use crate::potentials::force_between_particles;
 use crate::system::Particle;
-use crate::{algebra::Vector3, parameters::*, periodic_conditions::neighboring_3d_translations, system::System};
+use crate::verlet_lists::{VerletList, max_number_of_neighbors};
+use crate::{algebra::Vector3, parameters::*, periodic_conditions::neighboring_3d_symmetries, system::System};
 use plotters::prelude::*;
 use plotters::prelude::{RED, WHITE};
 
@@ -38,6 +40,7 @@ impl System {
 		}
 	}
 
+	/// Initialize the momentums of the particles with random values and recalibrate them to have the right initial temperature and zero kinetic momentum of the center of mass.
 	pub fn init_particles_momentums(&mut self) {
 		// Step 1: Set momentums to random vectors in unit cube
 		for particle in self.particles.iter_mut() {
@@ -50,6 +53,10 @@ impl System {
 		self.recalibrate_according_to_temperature();
 	}
 
+	/// Compute the kinetic energy and temperature of the system
+	///
+	/// # Returns
+	/// A tuple containing the kinetic energy and temperature of the system.
 	pub fn kinetic_energy_and_temperature(&self) -> (f64, f64) {
 		// Compute kinetic energy: K = sum_i (p_i^2 / m)
 		let mut sum_kinetic_energy = 0.0;
@@ -69,23 +76,30 @@ impl System {
 	}
 
 	/// Compute the total energy of the system (kinetic + potential) and its temperature
+	///
+	/// # Returns
+	/// A tuple containing the total energy and temperature of the system.
 	pub fn total_energy_and_temperature(&self) -> (f64, f64) {
 		// Calculate kinetic energy
 		let (kinetic_energy, temperature) = self.kinetic_energy_and_temperature();
 
 		// Calculate potential energy using the periodic conditions
-		let potential_energy = self.microscopic_energy_periodic(&neighboring_3d_translations(BOX_SIDE), R_MAX);
+		let potential_energy = self.microscopic_energy_periodic(&neighboring_3d_symmetries(BOX_SIDE), R_MAX);
 
 		return (kinetic_energy + potential_energy, temperature);
 	}
 
+	/// Compute the sum of all the forces applied to particles in the system, with periodic conditions.
+	///
+	/// # Returns
+	/// A vector of forces, where the force applied to particle i is given by `forces[i]`.
 	pub fn compute_forces_periodic(&self) -> Vec<Vector3> {
 		let mut forces = vec![Vector3::zero(); self.nb_particles_total()];
 
 		// Iterate particle pairs and apply equal-and-opposite forces.
 		for i in 0..self.nb_particles_total() {
 			for j in 0..self.nb_particles_total() {
-				for sym in neighboring_3d_translations(BOX_SIDE) {
+				for sym in neighboring_3d_symmetries(BOX_SIDE) {
 					// Skip self-interaction for the original particle
 					if i == j && sym == Vector3::zero() {
 						continue;
@@ -113,6 +127,9 @@ impl System {
 	}
 
 	/// Update the momentums of the particles according to the forces applied to them, for the velocity Verlet algorithm
+	///
+	/// # Arguments
+	/// * `forces` - A vector of forces, where the force applied to particle i is given by `forces[i]`.
 	#[inline(always)]
 	pub fn velocity_verlet_momentums_update(&mut self, forces: &Vec<Vector3>) {
 		// 1st equation: half time step update of the kinetic momentum
@@ -140,6 +157,7 @@ impl System {
 		}
 	}
 
+	/// Apply the Berendsen thermostat correction to the momentums of the particles, to correct the temperature of the system towards a target temperature.
 	fn correct_temperature_with_berendsen(&mut self, target_temperature: f64) {
 		let current_temperature = self.kinetic_energy_and_temperature().1;
 		let factor = GAMMA * ((target_temperature / current_temperature) - 1.0);
@@ -152,7 +170,9 @@ impl System {
 
 	/// A step in the simulation
 	/// Applies the velocity Verlet algorithm to update the coordinates and momentums of the particles, with periodic conditions.
-	/// If `correct_with_temperature` is Some, it applies the Berendsen thermostat correction with the given target temperature after the full step update.
+	///
+	/// # Arguments
+	/// * `correct_with_temperature` - If Some, it applies the Berendsen thermostat correction with the given target temperature after the full step update. If None, it does not apply any thermostat correction.
 	pub fn step(&mut self, correct_with_temperature: Option<f64>) {
 		// // INFO: max force magnitude and max particle momentum before update
 		// let forces = self.compute_forces_periodic();
@@ -163,7 +183,7 @@ impl System {
 		// // INFO: minimal pair distance (considering periodic images)
 		// let mut min_pair_dist2 = std::f64::INFINITY;
 		// let mut min_pair = (0usize, 0usize);
-		// for sym in neighboring_3d_translations(BOX_SIDE) {
+		// for sym in neighboring_3d_symmetries(BOX_SIDE) {
 		// 	for i in 0..self.nb_particles_total() {
 		// 		for j in 0..self.nb_particles_total() {
 		// 			if i == j {
@@ -200,6 +220,13 @@ impl System {
 		}
 	}
 
+	/// A step in the simulation, using Verlet lists for efficient neighbor searching.
+	/// Applies the velocity Verlet algorithm to update the coordinates and momentums of the particles, with periodic conditions.
+	///
+	/// # Arguments
+	/// * `verlet_list` - The Verlet list containing neighbors for all particles.
+	/// * `correct_with_temperature` - If Some, it applies the Berendsen thermostat correction with the given target temperature after the full step update. If None, it does not apply any thermostat correction.
+	/// * `max_number_of_neighbors` - The maximum number of neighbors per particle in the Verlet list.
 	pub fn step_with_verlet_list(
 		&mut self, verlet_list: &VerletList, correct_with_temperature: Option<f64>, max_number_of_neighbors: usize,
 	) {
@@ -218,8 +245,11 @@ impl System {
 	}
 
 	/// Simulate the system for a given number of steps, applying the velocity Verlet algorithm with periodic conditions.
-	/// If `correct_each` is not 0, it applies the Berendsen thermostat correction every `correct_each` steps with the target temperature T_0.
-	/// It saves the evolution of the total energy and temperature during the simulation in a plot at the given path `save_to`.
+	///
+	/// # Arguments
+	/// * `nb_steps` - The number of steps to simulate.
+	/// * `correct_each` - The frequency (in number of steps) at which to apply the Berendsen thermostat correction to maintain the temperature around T_0. For example, if `correct_each` is 10, it applies the correction every 10 steps. If `correct_each` is 0, it does not apply any correction.
+	/// * `save_to` - The path to save the energy and temperature evolution plot.
 	pub fn simulate(&mut self, nb_steps: usize, correct_each: usize, save_to: &str) {
 		let mut energies = vec![];
 		let mut temperatures = vec![];
@@ -243,12 +273,18 @@ impl System {
 		self.draw_plots(&energies, &temperatures, save_to);
 	}
 
+	/// Simulate the system for a given number of steps, applying the velocity Verlet algorithm with periodic conditions and using Verlet lists for efficient neighbor searching.
+	///
+	/// # Arguments
+	/// * `nb_steps` - The number of steps to simulate.
+	/// * `correct_each` - The frequency (in number of steps) at which to apply the Berendsen thermostat correction to maintain the temperature around T_0. For example, if `correct_each` is 10, it applies the correction every 10 steps. If `correct_each` is 0, it does not apply any correction.
+	/// * `save_to` - The path to save the energy and temperature evolution plot.
 	pub fn simulate_with_verlet_lists(&mut self, nb_steps: usize, correct_each: usize, save_to: &str) {
 		let mut energies = vec![];
 		let mut temperatures = vec![];
 
 		let max_number_of_neighbors = max_number_of_neighbors(self.nb_particles_total(), BOX_SIDE, R_MAX);
-		let mut verlet_list = VerletList::build(self, &neighboring_3d_translations(BOX_SIDE), R_MAX, max_number_of_neighbors);
+		let mut verlet_list = VerletList::build(self, &neighboring_3d_symmetries(BOX_SIDE), R_MAX, max_number_of_neighbors);
 
 		for step in 0..nb_steps {
 			// Give a few steps for particles to spread evenly
@@ -263,7 +299,7 @@ impl System {
 				if step % REBUILD_VERLET_LISTS_FREQUENCY == 0 && step != 0 {
 					verlet_list = VerletList::build(
 						self,
-						&neighboring_3d_translations(BOX_SIDE),
+						&neighboring_3d_symmetries(BOX_SIDE),
 						R_MAX,
 						max_number_of_neighbors,
 					);
@@ -286,6 +322,11 @@ impl System {
 		self.draw_plots(&energies, &temperatures, save_to);
 	}
 
+	/// Draw the energy and temperature evolution plots and save them to a file.
+	/// # Arguments
+	/// * `energies` - A vector of total energy values at each step.
+	/// * `temperatures` - A vector of temperature values at each step.
+	/// * `save_to` - The path to save the energy and temperature evolution plot.
 	fn draw_plots(&self, energies: &Vec<f64>, temperatures: &Vec<f64>, save_to: &str) {
 		let root = BitMapBackend::new(save_to, (1600, 600)).into_drawing_area();
 		let (left, right) = root.split_horizontally(800);

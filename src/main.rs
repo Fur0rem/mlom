@@ -10,5 +10,5 @@ fn main() {
 	// system.simulate(1000, NEVER_APPLY_THERMOSTAT, "plots/v18.png");
 	// system.simulate(2000, 5, "plots/v15_with_thermostat.png");
 
-	system.simulate_with_verlet_lists(3000, NEVER_APPLY_THERMOSTAT, "plots/smooth.png");
+	system.simulate_with_verlet_lists(10000, NEVER_APPLY_THERMOSTAT, "plots/v20.png");
 }
