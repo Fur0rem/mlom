@@ -46,7 +46,8 @@ pub fn quintic_smoothing_derivative(radius: f64) -> f64 {
 	return p5_derivative;
 }
 
-pub fn energy_between_particles(particle_i: &Particle, particle_j: &Particle, radius_cut: f64) -> f64 {
+#[allow(dead_code)]
+fn energy_between_particles_smooth(particle_i: &Particle, particle_j: &Particle, radius_cut: f64) -> f64 {
 	// Apply cut above given radius
 	let dist_ij_squared = particle_i.distance_to_squared(particle_j);
 	assert!(dist_ij_squared > 0.0001);
@@ -67,7 +68,8 @@ pub fn energy_between_particles(particle_i: &Particle, particle_j: &Particle, ra
 	return u_ij * quintic_smoothing(radius);
 }
 
-pub fn force_between_particles(particle_i: &Particle, particle_j: &Particle) -> Vector3 {
+#[allow(dead_code)]
+fn force_between_particles_smooth(particle_i: &Particle, particle_j: &Particle) -> Vector3 {
 	let dist_ij_squared = particle_i.distance_to_squared(particle_j);
 
 	// Cutoff radius
@@ -102,4 +104,60 @@ pub fn force_between_particles(particle_i: &Particle, particle_j: &Particle) -> 
 	let grad_z = gradient * dz + factor * dz;
 
 	return Vector3::from(grad_x, grad_y, grad_z);
+}
+
+#[allow(dead_code)]
+fn energy_between_particles_clear_cut(particle_i: &Particle, particle_j: &Particle, radius_cut: f64) -> f64 {
+	// Apply cut above given radius
+	let dist_ij_squared = particle_i.distance_to_squared(particle_j);
+	assert!(dist_ij_squared > 0.0001);
+
+	// Apply cut above given radius
+	if dist_ij_squared > radius_cut.powi(2) {
+		return 0.0;
+	}
+
+	// The usual energy term
+	let r_star_over_r_ij_pow_2 = (R_STAR * R_STAR) / dist_ij_squared;
+	let r_star_over_r_ij_pow6 = r_star_over_r_ij_pow_2 * r_star_over_r_ij_pow_2 * r_star_over_r_ij_pow_2;
+	let r_star_over_r_ij_pow12 = r_star_over_r_ij_pow6 * r_star_over_r_ij_pow6;
+	return r_star_over_r_ij_pow12 - (2.0 * r_star_over_r_ij_pow6);
+}
+
+#[allow(dead_code)]
+fn force_between_particles_clear_cut(particle_i: &Particle, particle_j: &Particle) -> Vector3 {
+	let dist_ij_squared = particle_i.distance_to_squared(particle_j);
+
+	// Cutoff radius
+	if dist_ij_squared > R_MAX * R_MAX {
+		return Vector3::zero();
+	}
+
+	let r_r2 = R_STAR.powi(2) / dist_ij_squared;
+	let r_r6 = r_r2 * r_r2 * r_r2;
+	let r_r12 = r_r6 * r_r6;
+
+	// Main gradient term
+	let inv_r2 = 1.0 / dist_ij_squared;
+	let gradient = -48.0 * EPSILON_STAR * (r_r12 - r_r6) * inv_r2;
+
+	// Distance components
+	let dx = particle_i.x() - particle_j.x();
+	let dy = particle_i.y() - particle_j.y();
+	let dz = particle_i.z() - particle_j.z();
+
+	// Total gradient for each coordinate
+	let grad_x = gradient * dx;
+	let grad_y = gradient * dy;
+	let grad_z = gradient * dz;
+
+	return Vector3::from(grad_x, grad_y, grad_z);
+}
+
+pub fn energy_between_particles(particle_i: &Particle, particle_j: &Particle, radius_cut: f64) -> f64 {
+	return energy_between_particles_smooth(particle_i, particle_j, radius_cut);
+}
+
+pub fn force_between_particles(particle_i: &Particle, particle_j: &Particle) -> Vector3 {
+	return force_between_particles_smooth(particle_i, particle_j);
 }

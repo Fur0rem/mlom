@@ -1,4 +1,4 @@
-use crate::energy::{energy_between_particles, force_between_particles};
+use crate::energy::force_between_particles;
 use crate::neighbor_query::{VerletList, max_number_of_neighbors};
 use crate::system::Particle;
 use crate::{algebra::Vector3, parameters::*, periodic_conditions::neighboring_3d_translations, system::System};
@@ -250,8 +250,6 @@ impl System {
 		let max_number_of_neighbors = max_number_of_neighbors(self.nb_particles_total(), BOX_SIDE, R_MAX);
 		let mut verlet_list = VerletList::build(self, &neighboring_3d_translations(BOX_SIDE), R_MAX, max_number_of_neighbors);
 
-		// Diagnostic: number of steps where we perform detailed comparisons
-		let diagnostic_steps = 20usize;
 		for step in 0..nb_steps {
 			// Give a few steps for particles to spread evenly
 			if step < PRE_VERLET_LISTS_STEPS {
