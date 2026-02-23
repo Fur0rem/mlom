@@ -1,6 +1,7 @@
 use crate::{
 	algebra::Vector3,
 	parameters::{EPSILON_STAR, R_STAR},
+	smoothing::quintic_smoothing,
 	system::System,
 };
 
@@ -55,9 +56,15 @@ impl System {
 					}
 
 					// The usual energy term
-					let r_star_over_r_ij = R_STAR / dist_ij_squared.sqrt();
-					let u_ij = r_star_over_r_ij.powi(12) - 2.0 * r_star_over_r_ij.powi(6);
-					total += u_ij;
+					let r_star_over_r_ij_pow_2 = (R_STAR * R_STAR) / dist_ij_squared;
+					let r_star_over_r_ij_pow6 =
+						r_star_over_r_ij_pow_2 * r_star_over_r_ij_pow_2 * r_star_over_r_ij_pow_2;
+					let r_star_over_r_ij_pow12 = r_star_over_r_ij_pow6 * r_star_over_r_ij_pow6;
+					let u_ij = r_star_over_r_ij_pow12 - (2.0 * r_star_over_r_ij_pow6);
+
+					// Apply P5 smoothing near cutoff (keeps U and F continuous near R_CUT)
+					let radius = dist_ij_squared.sqrt();
+					total += u_ij * quintic_smoothing(radius);
 				}
 			}
 		}

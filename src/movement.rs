@@ -1,3 +1,4 @@
+use crate::smoothing::quintic_smoothing_and_derivative;
 use crate::system::Particle;
 use crate::{algebra::Vector3, parameters::*, periodic_conditions::neighboring_3d_translations, system::System};
 use plotters::prelude::*;
@@ -98,26 +99,13 @@ impl System {
 					let r_r6 = r_r2 * r_r2 * r_r2;
 					let r_r12 = r_r6 * r_r6;
 
-					let inv_r2 = 1.0 / dist_ij_squared;
-
+					// P5 smoothing factors (keeps U and F continuous near R_CUT)
 					let radius = dist_ij_squared.sqrt();
 					assert!(radius > 0.0);
-
-					// P5 smoothing factors (keeps U and F continuous near R_CUT)
-					let mut p5 = 1.0;
-					let mut p5_derivative = 0.0;
-					if dist_ij_squared > R_MIN * R_MIN && dist_ij_squared < R_MAX * R_MAX {
-						let r1 = (radius - R_MIN) * (INVERSE_DIFF_MAX_MIN);
-						let r2 = r1 * r1;
-						let r3 = r1 * r2;
-						let r4 = r2 * r2;
-						let r5 = r2 * r3;
-						p5 = 1.0 - 10.0 * r3 + 15.0 * r4 - 6.0 * r5;
-						p5_derivative = -30.0 * INVERSE_DIFF_MAX_MIN * r2 + 60.0 * INVERSE_DIFF_MAX_MIN * r3
-							- 30.0 * INVERSE_DIFF_MAX_MIN * r4;
-					}
+					let (p5, p5_derivative) = quintic_smoothing_and_derivative(radius);
 
 					// Main gradient term
+					let inv_r2 = 1.0 / dist_ij_squared;
 					let gradient = -48.0 * EPSILON_STAR * (r_r12 - r_r6) * inv_r2 * p5;
 
 					// Distance components

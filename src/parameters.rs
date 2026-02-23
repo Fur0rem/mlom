@@ -1,9 +1,9 @@
 pub const R_STAR: f64 = 3.0; // ISM2
 pub const EPSILON_STAR: f64 = 0.2; // ISM2
 pub const R_CUT: f64 = 10.0; // ISM3
-pub const DR: f64 = 0.3 * R_CUT; // ISM3: Smoothing width around cutoff
-pub const R_MIN: f64 = R_CUT - DR; // ISM3: Start of smoothing region around cutoff
-pub const R_MAX: f64 = R_CUT + DR; // ISM3: End of smoothing region around cutoff
+pub const CUTOFF_SMOOTHING_WIDTH: f64 = 0.1 * R_CUT; // ISM3: Smoothing width around cutoff
+pub const R_MIN: f64 = R_CUT - CUTOFF_SMOOTHING_WIDTH; // ISM3: Start of smoothing region around cutoff
+pub const R_MAX: f64 = R_CUT + CUTOFF_SMOOTHING_WIDTH; // ISM3: End of smoothing region around cutoff
 pub const INVERSE_DIFF_MAX_MIN: f64 = 1.0 / (R_MAX - R_MIN); // ISM3: Precompute inverse of smoothing width for efficiency
 pub const FAR_AWAY: f64 = 99999999.0; // ISM3
 pub const BOX_SIDE: f64 = 42.0; // ISM3

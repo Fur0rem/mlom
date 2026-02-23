@@ -7,6 +7,6 @@ fn main() {
 	let (ke_init, t_init) = system.kinetic_energy_and_temperature();
 	println!("INIT: K = {}, T = {}", ke_init, t_init);
 
-	// system.simulate(200, NEVER_APPLY_THERMOSTAT, "plots/v15.png");
-	system.simulate(3000, 5, "plots/v15_with_thermostat.png");
+	system.simulate(3000, NEVER_APPLY_THERMOSTAT, "plots/v15.png");
+	// system.simulate(2000, 5, "plots/v15_with_thermostat.png");
 }
