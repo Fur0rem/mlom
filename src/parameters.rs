@@ -1,10 +1,16 @@
 pub const R_STAR: f64 = 3.0; // ISM2
 pub const EPSILON_STAR: f64 = 0.2; // ISM2
 pub const R_CUT: f64 = 10.0; // ISM3
+pub const DR: f64 = 0.3 * R_CUT; // ISM3: Smoothing width around cutoff
+pub const R_MIN: f64 = R_CUT - DR; // ISM3: Start of smoothing region around cutoff
+pub const R_MAX: f64 = R_CUT + DR; // ISM3: End of smoothing region around cutoff
+pub const INVERSE_DIFF_MAX_MIN: f64 = 1.0 / (R_MAX - R_MIN); // ISM3: Precompute inverse of smoothing width for efficiency
 pub const FAR_AWAY: f64 = 99999999.0; // ISM3
 pub const BOX_SIDE: f64 = 42.0; // ISM3
 pub const DELTA_TIME: f64 = 1.0; // ISM4, in femtoseconds
 pub const CONVERSION_FORCE: f64 = 0.0001 * 4.186; // ISM4
 pub const PARTICLE_MASS: f64 = 18.0; // ISM4
 pub const R_CONSTANT: f64 = 0.00199; // ISM4
-pub const T_0: f64 = 300.0; // ISM4, initial temperature in Kelvin
+pub const T_0: f64 = 300.0; // ISM4: Initial temperature
+pub const GAMMA: f64 = 0.01; // ISM4: Berendsen Thermostat correction factor
+pub const NEVER_APPLY_THERMOSTAT: usize = usize::MAX; // ISM4: Never apply the thermostat

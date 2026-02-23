@@ -80,11 +80,11 @@ impl Point3 {
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
 pub struct Vector3 {
 	/// x component
-	x: f64,
+	pub(crate) x: f64,
 	/// y component
-	y: f64,
+	pub(crate) y: f64,
 	/// z component
-	z: f64,
+	pub(crate) z: f64,
 }
 
 impl std::fmt::Debug for Vector3 {
@@ -280,18 +280,30 @@ impl std::ops::Div<f64> for Vector3 {
 	type Output = Vector3;
 	fn div(self, rhs: f64) -> Self::Output {
 		Self::Output {
-			x: self.x * rhs,
-			y: self.y * rhs,
-			z: self.z * rhs,
+			x: self.x / rhs,
+			y: self.y / rhs,
+			z: self.z / rhs,
 		}
 	}
 }
 
 impl std::ops::DivAssign<f64> for Vector3 {
 	fn div_assign(&mut self, rhs: f64) {
-		self.x *= rhs;
-		self.y *= rhs;
-		self.z *= rhs;
+		self.x /= rhs;
+		self.y /= rhs;
+		self.z /= rhs;
+	}
+}
+
+impl std::ops::Neg for Vector3 {
+	type Output = Vector3;
+
+	fn neg(self) -> Self::Output {
+		Self {
+			x: -self.x,
+			y: -self.y,
+			z: -self.z,
+		}
 	}
 }
 

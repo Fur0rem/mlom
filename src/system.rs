@@ -88,12 +88,36 @@ impl Particle {
 		self.coordinates.y = (self.coordinates.y + BOX_SIDE / 2.0).rem_euclid(BOX_SIDE) - BOX_SIDE / 2.0;
 		self.coordinates.z = (self.coordinates.z + BOX_SIDE / 2.0).rem_euclid(BOX_SIDE) - BOX_SIDE / 2.0;
 
-		assert!(self.coordinates.x <= BOX_SIDE / 2.0);
-		assert!(self.coordinates.x >= -BOX_SIDE / 2.0);
-		assert!(self.coordinates.y <= BOX_SIDE / 2.0);
-		assert!(self.coordinates.y >= -BOX_SIDE / 2.0);
-		assert!(self.coordinates.z <= BOX_SIDE / 2.0);
-		assert!(self.coordinates.z >= -BOX_SIDE / 2.0);
+		assert!(
+			self.coordinates.x <= BOX_SIDE / 2.0,
+			"Particle x coordinate is out of bounds: {}",
+			self.coordinates.x
+		);
+		assert!(
+			self.coordinates.x >= -BOX_SIDE / 2.0,
+			"Particle x coordinate is out of bounds: {}",
+			self.coordinates.x
+		);
+		assert!(
+			self.coordinates.y <= BOX_SIDE / 2.0,
+			"Particle y coordinate is out of bounds: {}",
+			self.coordinates.y
+		);
+		assert!(
+			self.coordinates.y >= -BOX_SIDE / 2.0,
+			"Particle y coordinate is out of bounds: {}",
+			self.coordinates.y
+		);
+		assert!(
+			self.coordinates.z <= BOX_SIDE / 2.0,
+			"Particle z coordinate is out of bounds: {}",
+			self.coordinates.z
+		);
+		assert!(
+			self.coordinates.z >= -BOX_SIDE / 2.0,
+			"Particle z coordinate is out of bounds: {}",
+			self.coordinates.z
+		);
 	}
 }
 
