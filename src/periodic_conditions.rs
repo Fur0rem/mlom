@@ -1,8 +1,8 @@
 use crate::{
 	algebra::Vector3,
-	parameters::{EPSILON_STAR, R_STAR},
-	smoothing::quintic_smoothing,
-	system::System,
+	energy::energy_between_particles,
+	parameters::*,
+	system::{Particle, System},
 };
 
 /// Computes the neighbors in 3D of the simulation box.
@@ -36,35 +36,12 @@ impl System {
 					}
 
 					// Compute translated particle j
-					let particle_j_with_symmetry = (self.particles[j].coordinates + sym).as_point();
-					assert!(
-						self.particles[i].coordinates != particle_j_with_symmetry,
-						"Particle {i} and particle {j} with symmetry {sym:?} are at the same position: {:?}",
-						self.particles[i].coordinates,
-					);
+					let particle_j_with_symmetry = Particle {
+						coordinates: (self.particles[j].coordinates + *sym).as_point(),
+						momentum: self.particles[j].momentum,
+					};
 
-					// Apply cut above given radius
-					let dist_ij_squared = self.particles[i].coordinates.distance_to_squared(&particle_j_with_symmetry);
-					assert!(
-						dist_ij_squared > 0.0001,
-						"Distance between particle {i} and particle {j} with symmetry {sym:?} is near-zero"
-					);
-
-					// Apply cut above given radius
-					if dist_ij_squared > radius_cut.powi(2) {
-						continue;
-					}
-
-					// The usual energy term
-					let r_star_over_r_ij_pow_2 = (R_STAR * R_STAR) / dist_ij_squared;
-					let r_star_over_r_ij_pow6 =
-						r_star_over_r_ij_pow_2 * r_star_over_r_ij_pow_2 * r_star_over_r_ij_pow_2;
-					let r_star_over_r_ij_pow12 = r_star_over_r_ij_pow6 * r_star_over_r_ij_pow6;
-					let u_ij = r_star_over_r_ij_pow12 - (2.0 * r_star_over_r_ij_pow6);
-
-					// Apply P5 smoothing near cutoff (keeps U and F continuous near R_CUT)
-					let radius = dist_ij_squared.sqrt();
-					total += u_ij * quintic_smoothing(radius);
+					total += energy_between_particles(&self.particles[i], &particle_j_with_symmetry, radius_cut);
 				}
 			}
 		}

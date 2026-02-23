@@ -1,4 +1,5 @@
-use crate::smoothing::quintic_smoothing_and_derivative;
+use crate::energy::{energy_between_particles, force_between_particles};
+use crate::neighbor_query::{VerletList, max_number_of_neighbors};
 use crate::system::Particle;
 use crate::{algebra::Vector3, parameters::*, periodic_conditions::neighboring_3d_translations, system::System};
 use plotters::prelude::*;
@@ -67,6 +68,17 @@ impl System {
 		return (kinetic_energy, temperature);
 	}
 
+	/// Compute the total energy of the system (kinetic + potential) and its temperature
+	pub fn total_energy_and_temperature(&self) -> (f64, f64) {
+		// Calculate kinetic energy
+		let (kinetic_energy, temperature) = self.kinetic_energy_and_temperature();
+
+		// Calculate potential energy using the periodic conditions
+		let potential_energy = self.microscopic_energy_periodic(&neighboring_3d_translations(BOX_SIDE), R_MAX);
+
+		return (kinetic_energy + potential_energy, temperature);
+	}
+
 	pub fn compute_forces_periodic(&self) -> Vec<Vector3> {
 		let mut forces = vec![Vector3::zero(); self.nb_particles_total()];
 
@@ -88,47 +100,11 @@ impl System {
 						coordinates: (self.particles[j].coordinates + sym).as_point(),
 						momentum: self.particles[j].momentum,
 					};
-					let dist_ij_squared = self.particles[i].distance_to_squared(&j_with_sym);
-
-					// Cutoff radius
-					if dist_ij_squared > R_MAX * R_MAX {
-						continue;
-					}
-
-					let r_r2 = R_STAR.powi(2) / dist_ij_squared;
-					let r_r6 = r_r2 * r_r2 * r_r2;
-					let r_r12 = r_r6 * r_r6;
-
-					// P5 smoothing factors (keeps U and F continuous near R_CUT)
-					let radius = dist_ij_squared.sqrt();
-					assert!(radius > 0.0);
-					let (p5, p5_derivative) = quintic_smoothing_and_derivative(radius);
-
-					// Main gradient term
-					let inv_r2 = 1.0 / dist_ij_squared;
-					let gradient = -48.0 * EPSILON_STAR * (r_r12 - r_r6) * inv_r2 * p5;
-
-					// Distance components
-					let dx = self.particles[i].x() - j_with_sym.x();
-					let dy = self.particles[i].y() - j_with_sym.y();
-					let dz = self.particles[i].z() - j_with_sym.z();
-
-					// P5 derivative term
-					let factor = p5_derivative * (4.0 * EPSILON_STAR * (r_r12 - 2.0 * r_r6)) / radius;
-
-					// Total gradient for each coordinate
-					let grad_x = gradient * dx + factor * dx;
-					let grad_y = gradient * dy + factor * dy;
-					let grad_z = gradient * dz + factor * dz;
+					let grad = force_between_particles(&self.particles[i], &j_with_sym);
 
 					// Apply equal and opposite forces
-					forces[i].x += grad_x;
-					forces[i].y += grad_y;
-					forces[i].z += grad_z;
-
-					forces[j].x -= grad_x;
-					forces[j].y -= grad_y;
-					forces[j].z -= grad_z;
+					forces[i] += grad;
+					forces[j] -= grad;
 				}
 			}
 		}
@@ -144,6 +120,12 @@ impl System {
 		// F_i = -Nabla U => momentum(t) + 1/2 Nabla U(t) dt = momentum(t) - 1/2 F_i dt
 		for i in 0..self.nb_particles_total() {
 			self.particles[i].momentum = self.particles[i].momentum - forces[i] * DELTA_TIME * 0.5 * CONVERSION_FORCE;
+			assert!(
+				self.particles[i].momentum.norm() < MAX_PARTICLE_VELOCITY,
+				"Particle {} has momentum {}, which is above the maximum anticipated velocity. This will cause wrong neighbor queries in verlet lists and domain decomposition.",
+				i,
+				self.particles[i].momentum.norm()
+			);
 		}
 	}
 
@@ -155,6 +137,16 @@ impl System {
 			let offset = (self.particles[i].momentum * DELTA_TIME) / PARTICLE_MASS;
 			self.particles[i].coordinates = (self.particles[i].coordinates + offset).as_point();
 			self.particles[i].put_back_in_box();
+		}
+	}
+
+	fn correct_temperature_with_berendsen(&mut self, target_temperature: f64) {
+		let current_temperature = self.kinetic_energy_and_temperature().1;
+		let factor = GAMMA * ((target_temperature / current_temperature) - 1.0);
+		for p in self.particles.iter_mut() {
+			p.momentum.x += factor * p.momentum.x;
+			p.momentum.y += factor * p.momentum.y;
+			p.momentum.z += factor * p.momentum.z;
 		}
 	}
 
@@ -204,25 +196,25 @@ impl System {
 
 		// Correct the momentums with the Berendsen thermostat if requested
 		if let Some(target_temperature) = correct_with_temperature {
-			let current_temperature = self.kinetic_energy_and_temperature().1;
-			let factor = GAMMA * ((target_temperature / current_temperature) - 1.0);
-			for p in self.particles.iter_mut() {
-				p.momentum.x += factor * p.momentum.x;
-				p.momentum.y += factor * p.momentum.y;
-				p.momentum.z += factor * p.momentum.z;
-			}
+			self.correct_temperature_with_berendsen(target_temperature);
 		}
 	}
 
-	/// Compute the total energy of the system (kinetic + potential) and its temperature
-	pub fn total_energy_and_temperature(&self) -> (f64, f64) {
-		// Calculate kinetic energy
-		let (kinetic_energy, temperature) = self.kinetic_energy_and_temperature();
+	pub fn step_with_verlet_list(
+		&mut self, verlet_list: &VerletList, correct_with_temperature: Option<f64>, max_number_of_neighbors: usize,
+	) {
+		let forces = self.compute_forces_periodic_with_neighbor_lists(verlet_list, max_number_of_neighbors);
+		self.velocity_verlet_momentums_update(&forces);
 
-		// Calculate potential energy using the periodic conditions
-		let potential_energy = self.microscopic_energy_periodic(&neighboring_3d_translations(BOX_SIDE), R_CUT);
+		self.velocity_verlet_coordinates_update();
 
-		return (kinetic_energy + potential_energy, temperature);
+		let forces = self.compute_forces_periodic_with_neighbor_lists(verlet_list, max_number_of_neighbors);
+		self.velocity_verlet_momentums_update(&forces);
+
+		// Correct the momentums with the Berendsen thermostat if requested
+		if let Some(target_temperature) = correct_with_temperature {
+			self.correct_temperature_with_berendsen(target_temperature);
+		}
 	}
 
 	/// Simulate the system for a given number of steps, applying the velocity Verlet algorithm with periodic conditions.
@@ -231,6 +223,7 @@ impl System {
 	pub fn simulate(&mut self, nb_steps: usize, correct_each: usize, save_to: &str) {
 		let mut energies = vec![];
 		let mut temperatures = vec![];
+
 		for step in 0..nb_steps {
 			// Correct only every `correct_each` steps
 			if step % correct_each == 0 && step != 0 {
@@ -247,8 +240,58 @@ impl System {
 			temperatures.push(temperature);
 		}
 
+		self.draw_plots(&energies, &temperatures, save_to);
+	}
+
+	pub fn simulate_with_verlet_lists(&mut self, nb_steps: usize, correct_each: usize, save_to: &str) {
+		let mut energies = vec![];
+		let mut temperatures = vec![];
+
+		let max_number_of_neighbors = max_number_of_neighbors(self.nb_particles_total(), BOX_SIDE, R_MAX);
+		let mut verlet_list = VerletList::build(self, &neighboring_3d_translations(BOX_SIDE), R_MAX, max_number_of_neighbors);
+
+		// Diagnostic: number of steps where we perform detailed comparisons
+		let diagnostic_steps = 20usize;
+		for step in 0..nb_steps {
+			// Give a few steps for particles to spread evenly
+			if step < PRE_VERLET_LISTS_STEPS {
+				if step % correct_each == 0 && step != 0 {
+					self.step(Some(T_0));
+				} else {
+					self.step(None);
+				}
+			} else {
+				// Rebuild Verlet list every `REBUILD_VERLET_LISTS_FREQUENCY` steps
+				if step % REBUILD_VERLET_LISTS_FREQUENCY == 0 && step != 0 {
+					verlet_list = VerletList::build(
+						self,
+						&neighboring_3d_translations(BOX_SIDE),
+						R_MAX,
+						max_number_of_neighbors,
+					);
+				}
+
+				if step % correct_each == 0 && step != 0 {
+					self.step_with_verlet_list(&verlet_list, Some(T_0), max_number_of_neighbors);
+				} else {
+					self.step_with_verlet_list(&verlet_list, None, max_number_of_neighbors);
+				}
+			}
+			let (total_energy, temperature) = self.total_energy_and_temperature();
+			println!(
+				"Step {:<5}: Total energy = {:<14.8}  |  Temperature = {:<15.6}",
+				step, total_energy, temperature
+			);
+			energies.push(total_energy);
+			temperatures.push(temperature);
+		}
+		self.draw_plots(&energies, &temperatures, save_to);
+	}
+
+	fn draw_plots(&self, energies: &Vec<f64>, temperatures: &Vec<f64>, save_to: &str) {
 		let root = BitMapBackend::new(save_to, (1600, 600)).into_drawing_area();
 		let (left, right) = root.split_horizontally(800);
+		let nb_steps = energies.len();
 
 		// Energy plot
 		left.fill(&WHITE).unwrap();
